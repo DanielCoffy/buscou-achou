@@ -67,7 +67,7 @@ if setup_scraper_binary():
             if os.path.exists(temp_results_file):
                 os.remove(temp_results_file)
 
-            # Executa com xvfb-run para simular ambiente gráfico no Linux
+            # Executa com xvfb-run para ambiente gráfico no Linux
             cmd = [
                 "xvfb-run",
                 "--auto-servernum",
@@ -88,7 +88,8 @@ if setup_scraper_binary():
 
             if os.path.exists(temp_results_file) and os.path.getsize(temp_results_file) > 0:
                 try:
-                    df_bruto = pd.read_json(temp_results_file)
+                    # Leitura corrigida para o formato JSON Lines (NDJSON)
+                    df_bruto = pd.read_json(temp_results_file, lines=True)
                     
                     if os.path.exists(temp_results_file):
                         os.remove(temp_results_file)
