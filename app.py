@@ -12,38 +12,26 @@ st.set_page_config(page_title="Buscador de Brechós B2B", page_icon="🛍️", l
 st.title("🛍️ Buscador de Brechós B2B")
 st.caption("Encontre novos clientes e parceiros diretamente no Google Maps")
 
-BINARY_NAME = "google-maps-scraper"
-# URL direta para o binário comprimido do repositório gosom
-RELEASE_URL = "https://github.com/gosom/google-maps-scraper/releases/download/v0.3.10/google-maps-scraper_Linux_x86_64.tar.gz"
+BINARY_NAME = "google_maps_scraper"
+# URL atualizada para a versão mais recente do binário Linux x86_64
+RELEASE_URL = "https://github.com/gosom/google-maps-scraper/releases/download/v1.18.1/google_maps_scraper-1.18.1-linux-amd64"
 
 # --- FUNÇÃO PARA GARANTIR O BINÁRIO RODE ---
 def setup_scraper_binary():
     if not os.path.exists(BINARY_NAME):
-        with st.spinner("Instalando o motor de busca..."):
+        with st.spinner("Baixando o executável do scraper..."):
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(RELEASE_URL, headers=headers, stream=True)
             
-            archive_path = "scraper.tar.gz"
-            with open(archive_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            try:
-                # Extrai o arquivo .tar.gz
-                with tarfile.open(archive_path, "r:gz") as tar:
-                    tar.extractall()
-            except Exception as e:
-                st.error(f"Erro ao descompactar o arquivo: {e}")
-                if os.path.exists(archive_path):
-                    os.remove(archive_path)
-                return False
-            
-            # Garante permissão de execução
-            if os.path.exists(BINARY_NAME):
+            if response.status_code == 200:
+                with open(BINARY_NAME, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                # Concede permissão de execução (chmod +x)
                 os.chmod(BINARY_NAME, 0o755)
-            
-            if os.path.exists(archive_path):
-                os.remove(archive_path)
+            else:
+                st.error(f"Erro ao baixar o executável. Código HTTP: {response.status_code}")
+                return False
     return True
 
 # --- FUNÇÃO DE ENVIO PARA O GOOGLE SHEETS ---
