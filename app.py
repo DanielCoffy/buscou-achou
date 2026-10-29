@@ -1,5 +1,4 @@
 import os
-import tarfile
 import subprocess
 import requests
 import pandas as pd
@@ -13,13 +12,12 @@ st.title("🛍️ Buscador de Brechós B2B")
 st.caption("Encontre novos clientes e parceiros diretamente no Google Maps")
 
 BINARY_NAME = "google_maps_scraper"
-# URL atualizada para a versão mais recente do binário Linux x86_64
 RELEASE_URL = "https://github.com/gosom/google-maps-scraper/releases/download/v1.18.1/google_maps_scraper-1.18.1-linux-amd64"
 
-# --- FUNÇÃO PARA GARANTIR O BINÁRIO RODE ---
+# --- FUNÇÃO PARA INSTALAR O EXECUTÁVEL ---
 def setup_scraper_binary():
     if not os.path.exists(BINARY_NAME):
-        with st.spinner("Baixando o executável do scraper..."):
+        with st.spinner("Instalando o motor de busca no servidor..."):
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(RELEASE_URL, headers=headers, stream=True)
             
@@ -27,14 +25,13 @@ def setup_scraper_binary():
                 with open(BINARY_NAME, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                # Concede permissão de execução (chmod +x)
                 os.chmod(BINARY_NAME, 0o755)
             else:
-                st.error(f"Erro ao baixar o executável. Código HTTP: {response.status_code}")
+                st.error(f"Erro ao baixar executável. Código HTTP: {response.status_code}")
                 return False
     return True
 
-# --- FUNÇÃO DE ENVIO PARA O GOOGLE SHEETS ---
+# --- FUNÇÃO DE ENVIO PARA O GOOGLE SHEETS (OPCIONAL) ---
 def salvar_no_google_sheets(df):
     try:
         if "GOOGLE_CREDENTIALS" in st.secrets:
@@ -61,15 +58,15 @@ if setup_scraper_binary():
         if not termo_busca:
             st.warning("Por favor, digite um termo de busca.")
         else:
-            results_file = "resultados_brutos.csv"
+            temp_results_file = "temp_results.csv"
             
-            if os.path.exists(results_file):
-                os.remove(results_file)
+            if os.path.exists(temp_results_file):
+                os.remove(temp_results_file)
 
             cmd = [
                 f"./{BINARY_NAME}",
                 "-q", termo_busca,
-                "-results", results_file,
+                "-o", temp_results_file,
                 "-depth", str(profundidade),
                 "-lang", "pt"
             ]
@@ -77,40 +74,48 @@ if setup_scraper_binary():
             with st.spinner("Varrendo o Google Maps... Isso pode levar de 1 a 3 minutos."):
                 process = subprocess.run(cmd, capture_output=True, text=True)
 
-            if os.path.exists(results_file):
-                df_bruto = pd.read_csv(results_file)
-                
-                if not df_bruto.empty:
-                    colunas_desejadas = ["title", "phone", "website", "address", "rating", "reviews_total"]
-                    colunas_existentes = [col for col in colunas_desejadas if col in df_bruto.columns]
+            if os.path.exists(temp_results_file):
+                try:
+                    df_bruto = pd.read_csv(temp_results_file)
                     
-                    df_limpo = df_bruto[colunas_existentes].dropna(subset=["phone"]) if "phone" in df_bruto.columns else df_bruto[colunas_existentes]
+                    # Remove o arquivo temporário de execução imediatamente após carregar em memória
+                    os.remove(temp_results_file)
                     
-                    renomear = {
-                        "title": "Nome do Brechó",
-                        "phone": "Telefone/WhatsApp",
-                        "website": "Site/Instagram",
-                        "address": "Endereço",
-                        "rating": "Nota",
-                        "reviews_total": "Total Avaliações"
-                    }
-                    df_limpo = df_limpo.rename(columns=renomear)
+                    if not df_bruto.empty:
+                        colunas_desejadas = ["title", "phone", "website", "address", "rating", "reviews_total"]
+                        colunas_existentes = [col for col in colunas_desejadas if col in df_bruto.columns]
+                        
+                        df_limpo = df_bruto[colunas_existentes].dropna(subset=["phone"]) if "phone" in df_bruto.columns else df_bruto[colunas_existentes]
+                        
+                        renomear = {
+                            "title": "Nome do Brechó",
+                            "phone": "Telefone/WhatsApp",
+                            "website": "Site/Instagram",
+                            "address": "Endereço",
+                            "rating": "Nota",
+                            "reviews_total": "Total Avaliações"
+                        }
+                        df_limpo = df_limpo.rename(columns=renomear)
 
-                    st.success(f"Busca finalizada! {len(df_limpo)} brechós encontrados.")
-                    st.dataframe(df_limpo, use_container_width=True)
+                        st.success(f"Busca finalizada! {len(df_limpo)} brechós encontrados.")
+                        
+                        # Exibe os dados diretamente na tela como uma lista interativa em formato de tabela
+                        st.subheader("📋 Lista de Brechós Encontrados")
+                        st.data_editor(
+                            df_limpo,
+                            use_container_width=True,
+                            hide_index=True,
+                            disabled=True # Modo de visualização/leitura na tela
+                        )
 
-                    csv_data = df_limpo.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Baixar em CSV / Excel",
-                        data=csv_data,
-                        file_name=f"brechos_{termo_busca.replace(' ', '_')}.csv",
-                        mime="text/csv",
-                    )
+                        # Envio automático para a planilha do Google Sheets (se configurado)
+                        if salvar_no_google_sheets(df_limpo):
+                            st.toast("Contatos sincronizados com o Google Sheets!", icon="✅")
 
-                    if salvar_no_google_sheets(df_limpo):
-                        st.toast("Contatos sincronizados com o Google Sheets!", icon="✅")
-
-                else:
-                    st.info("Nenhum resultado encontrado para essa busca.")
+                    else:
+                        st.info("Nenhum resultado retornado para essa busca.")
+                except Exception as err:
+                    st.error(f"Erro ao processar os dados da busca: {err}")
             else:
-                st.error("Falha ao gerar o arquivo de resultados. Tente novamente com outro termo.")
+                st.error("O processo não conseguiu retornar resultados. Veja o log do terminal:")
+                st.code(process.stderr if process.stderr else process.stdout)
