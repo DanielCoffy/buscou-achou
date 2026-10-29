@@ -58,15 +58,21 @@ if setup_scraper_binary():
         if not termo_busca:
             st.warning("Por favor, digite um termo de busca.")
         else:
+            input_file = "input_queries.txt"
             temp_results_file = "temp_results.csv"
             
+            # Cria o arquivo de entrada com o termo informado
+            with open(input_file, "w", encoding="utf-8") as f:
+                f.write(termo_busca)
+
             if os.path.exists(temp_results_file):
                 os.remove(temp_results_file)
 
+            # Flags atualizadas conforme a especificação do CLI
             cmd = [
                 f"./{BINARY_NAME}",
-                "-q", termo_busca,
-                "-o", temp_results_file,
+                "-input", input_file,
+                "-results", temp_results_file,
                 "-depth", str(profundidade),
                 "-lang", "pt"
             ]
@@ -74,12 +80,16 @@ if setup_scraper_binary():
             with st.spinner("Varrendo o Google Maps... Isso pode levar de 1 a 3 minutos."):
                 process = subprocess.run(cmd, capture_output=True, text=True)
 
+            # Limpa o arquivo de input temporário
+            if os.path.exists(input_file):
+                os.remove(input_file)
+
             if os.path.exists(temp_results_file):
                 try:
                     df_bruto = pd.read_csv(temp_results_file)
                     
-                    # Remove o arquivo temporário de execução imediatamente após carregar em memória
-                    os.remove(temp_results_file)
+                    if os.path.exists(temp_results_file):
+                        os.remove(temp_results_file)
                     
                     if not df_bruto.empty:
                         colunas_desejadas = ["title", "phone", "website", "address", "rating", "reviews_total"]
@@ -99,16 +109,14 @@ if setup_scraper_binary():
 
                         st.success(f"Busca finalizada! {len(df_limpo)} brechós encontrados.")
                         
-                        # Exibe os dados diretamente na tela como uma lista interativa em formato de tabela
                         st.subheader("📋 Lista de Brechós Encontrados")
                         st.data_editor(
                             df_limpo,
                             use_container_width=True,
                             hide_index=True,
-                            disabled=True # Modo de visualização/leitura na tela
+                            disabled=True
                         )
 
-                        # Envio automático para a planilha do Google Sheets (se configurado)
                         if salvar_no_google_sheets(df_limpo):
                             st.toast("Contatos sincronizados com o Google Sheets!", icon="✅")
 
