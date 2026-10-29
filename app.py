@@ -59,34 +59,37 @@ if setup_scraper_binary():
             st.warning("Por favor, digite um termo de busca.")
         else:
             input_file = "input_queries.txt"
-            temp_results_file = "temp_results.csv"
+            temp_results_file = "temp_results.json"
             
-            # Cria o arquivo de entrada com o termo informado
+            # Escreve o termo no arquivo de input
             with open(input_file, "w", encoding="utf-8") as f:
-                f.write(termo_busca)
+                f.write(termo_busca + "\n")
 
             if os.path.exists(temp_results_file):
                 os.remove(temp_results_file)
 
-            # Flags atualizadas conforme a especificação do CLI
+            # Comando usando JSON e fast-mode para garantir velocidade e estabilidade no Linux
             cmd = [
                 f"./{BINARY_NAME}",
                 "-input", input_file,
                 "-results", temp_results_file,
                 "-depth", str(profundidade),
-                "-lang", "pt"
+                "-lang", "pt",
+                "-json",
+                "-fast-mode"
             ]
 
-            with st.spinner("Varrendo o Google Maps... Isso pode levar de 1 a 3 minutos."):
+            with st.spinner("Varrendo o Google Maps... Isso pode levar de 1 a 2 minutos."):
                 process = subprocess.run(cmd, capture_output=True, text=True)
 
             # Limpa o arquivo de input temporário
             if os.path.exists(input_file):
                 os.remove(input_file)
 
-            if os.path.exists(temp_results_file):
+            if os.path.exists(temp_results_file) and os.path.getsize(temp_results_file) > 0:
                 try:
-                    df_bruto = pd.read_csv(temp_results_file)
+                    # Leitura dos dados formatados em JSON
+                    df_bruto = pd.read_json(temp_results_file)
                     
                     if os.path.exists(temp_results_file):
                         os.remove(temp_results_file)
@@ -95,7 +98,11 @@ if setup_scraper_binary():
                         colunas_desejadas = ["title", "phone", "website", "address", "rating", "reviews_total"]
                         colunas_existentes = [col for col in colunas_desejadas if col in df_bruto.columns]
                         
-                        df_limpo = df_bruto[colunas_existentes].dropna(subset=["phone"]) if "phone" in df_bruto.columns else df_bruto[colunas_existentes]
+                        df_limpo = df_bruto[colunas_existentes].copy()
+                        
+                        # Filtra registros onde o telefone não é nulo/vazio (se a coluna existir)
+                        if "phone" in df_limpo.columns:
+                            df_limpo = df_limpo.dropna(subset=["phone"])
                         
                         renomear = {
                             "title": "Nome do Brechó",
@@ -125,5 +132,7 @@ if setup_scraper_binary():
                 except Exception as err:
                     st.error(f"Erro ao processar os dados da busca: {err}")
             else:
-                st.error("O processo não conseguiu retornar resultados. Veja o log do terminal:")
-                st.code(process.stderr if process.stderr else process.stdout)
+                st.error("O scraper não retornou dados para este termo. Verifique se o termo está correto ou tente aumentar a profundidade.")
+                if process.stderr or process.stdout:
+                    with st.expander("Ver detalhes técnicos do log"):
+                        st.code(process.stderr if process.stderr else process.stdout)
