@@ -67,17 +67,20 @@ if setup_scraper_binary():
             if os.path.exists(temp_results_file):
                 os.remove(temp_results_file)
 
-            # Comando limpo sem a flag -fast-mode (permitindo busca textual direta)
+            # Executa com xvfb-run para simular ambiente gráfico no Linux
             cmd = [
+                "xvfb-run",
+                "--auto-servernum",
                 f"./{BINARY_NAME}",
                 "-input", input_file,
                 "-results", temp_results_file,
                 "-depth", str(profundidade),
                 "-lang", "pt",
-                "-json"
+                "-json",
+                "-disable-page-reuse"
             ]
 
-            with st.spinner("Varrendo o Google Maps... Isso leva cerca de 1 a 2 minutos."):
+            with st.spinner("Varrendo o Google Maps... Isso pode levar de 1 a 2 minutos."):
                 process = subprocess.run(cmd, capture_output=True, text=True)
 
             if os.path.exists(input_file):
